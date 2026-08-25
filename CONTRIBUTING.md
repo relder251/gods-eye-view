@@ -53,6 +53,26 @@ The highest-leverage places to jump in:
 4. If you add or change a data source, update [DATA_SOURCES.md](DATA_SOURCES.md) with its license and attribution. **Don't add data you don't have the right to redistribute** — fetch it at runtime instead.
 5. Describe what you changed and how you verified it (screenshots welcome for anything visual).
 
+### Branch protection on `main`
+
+This lives in repository settings rather than in the repo, so it is written down here to keep the intent visible and reproducible. Settings -> Branches -> Add branch protection rule (or Settings -> Rules -> Rulesets), pattern `main`:
+
+| Setting | Value |
+|---|---|
+| Require status checks to pass | on — `Node 24.x` and `Node 26.x` |
+| Require a pull request before merging | on |
+| Required approvals | **0** while there is a single maintainer |
+| Block force pushes | on |
+| Restrict deletions | on |
+| Do not allow bypassing the above settings | off while there is a single maintainer |
+
+Two of those are easy to get wrong:
+
+- **The required checks are the job names, not the workflow name.** `ci.yml` is named `CI`, but it reports two check runs — `Node 24.x` and `Node 26.x` — one per entry in its Node matrix. Requiring `CI` creates a rule that waits forever on a check that never reports, and blocks every merge. If the matrix in `.github/workflows/ci.yml` changes, the required-check names have to change with it.
+- **Required approvals and admin enforcement lock out a solo maintainer.** With one person on the repo, requiring even one approval means nobody can merge anything, and enforcing the rules for administrators removes the escape hatch for a CI outage unrelated to the diff. Turn both on once there is a second maintainer, not before.
+
+"Require branches to be up to date before merging" is a judgement call. It is stricter, but every push to `main` then forces an update and a fresh CI run on every open PR before it can merge.
+
 ## Ground rules
 
 - This is a tool for **public** data. Don't add scraping of sources whose terms forbid it, private/paywalled datasets, or anything that misrepresents public-data inference as authoritative intelligence.
