@@ -11,6 +11,13 @@
  *    header — a forwarded-for value is client-controlled. This holds even when
  *    the operator opts into `HOST=0.0.0.0`, so sharing the globe on a LAN never
  *    shares the key console with it.
+ *  - **Same-origin only.** Loopback is necessary and NOT sufficient: the
+ *    developer's own browser is a loopback client, so any site they happen to
+ *    have open can make it POST here. The same-origin policy stops that page
+ *    reading the response, but not sending the request — which is enough to
+ *    overwrite a credential with an attacker's own, quietly routing the
+ *    developer's usage through the attacker's account. See
+ *    `resolveRequestOrigin`.
  *  - **Allowlisted names only.** Only variables the catalog renders can be
  *    written, so a request cannot invent an assignment.
  *  - **No secret ever leaves.** Status reports presence, length, and a short
@@ -83,6 +90,65 @@ export function describeVariable({ processValue, fileValue } = {}) {
     inFile: fileSet,
     inProcess: processSet,
   };
+}
+
+/**
+ * Reject a request the developer's own browser was made to send by another site.
+ *
+ * Three checks, of which the first is the one actually carrying the weight:
+ *
+ *  1. **A JSON content type is required on writes.** `application/json` is not
+ *     a CORS-safelisted content type, so a cross-origin `fetch` that sets it
+ *     triggers a preflight `OPTIONS`. This server answers no CORS headers, so
+ *     that preflight fails and the browser never sends the write at all. The
+ *     attack this closes uses `text/plain`, which needs no preflight — so
+ *     accepting any content type is what made the endpoint reachable.
+ *  2. **A present `Origin` must match the `Host`.** Browsers attach `Origin` to
+ *     every cross-origin POST. Command-line clients omit it entirely and are
+ *     not the threat here — CSRF requires a browser — so an absent `Origin` is
+ *     allowed and `curl` keeps working. A literal `null` origin (sandboxed
+ *     frame, `file://`) is refused rather than treated as absent.
+ *  3. **A present `Sec-Fetch-Site` must say same-origin.** Redundant with the
+ *     above on any current browser, and free.
+ *
+ * @param {Object} [request]
+ * @param {Record<string, string|string[]|undefined>} [request.headers] - Node request headers.
+ * @param {boolean} [request.requireJsonBody] - True for endpoints that accept a body.
+ * @returns {{ok: boolean, reason: string|null}}
+ */
+export function resolveRequestOrigin({ headers = {}, requireJsonBody = false } = {}) {
+  const header = (name) => {
+    const value = headers[name];
+    return String(Array.isArray(value) ? value[0] : (value ?? '')).trim();
+  };
+
+  if (requireJsonBody) {
+    const contentType = header('content-type').split(';')[0].trim().toLowerCase();
+    if (contentType !== 'application/json') {
+      return { ok: false, reason: 'Content-Type must be application/json.' };
+    }
+  }
+
+  const site = header('sec-fetch-site').toLowerCase();
+  if (site && site !== 'same-origin' && site !== 'none') {
+    return { ok: false, reason: 'Cross-site requests are not accepted.' };
+  }
+
+  const origin = header('origin');
+  if (origin) {
+    const host = header('host');
+    let originHost = null;
+    try {
+      originHost = new URL(origin).host;
+    } catch {
+      originHost = null;
+    }
+    if (!originHost || !host || originHost !== host) {
+      return { ok: false, reason: 'Cross-origin requests are not accepted.' };
+    }
+  }
+
+  return { ok: true, reason: null };
 }
 
 /**

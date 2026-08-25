@@ -6,6 +6,7 @@ import {
   MIN_LENGTH_FOR_TAIL,
   describeVariable,
   isLoopbackAddress,
+  resolveRequestOrigin,
   resolveWritePermission,
   sanitizeWriteRequest,
 } from './setupServerPolicy.js';
@@ -112,4 +113,120 @@ test('an operator can turn writing off entirely', () => {
   assert.match(readonly.reason, /GEV_SETUP_READONLY/);
   // Any other value leaves writing on, matching how the other opt-in flags read.
   assert.equal(resolveWritePermission({ remoteAddress: '127.0.0.1', readonlyFlag: '0' }).allowed, true);
+});
+
+// ── Cross-origin writes ─────────────────────────────────────────────────────
+//
+// The attack these cover, reproduced against the real endpoint before the fix:
+// a developer with the dev server running visits any other site; that site
+// POSTs `text/plain` (a CORS "simple request", so no preflight) to
+// /api/setup/env; the request arrives from the browser's loopback socket, so
+// the loopback gate passes it, and an attacker-chosen OPENAI_API_KEY lands in
+// .env. The response is unreadable to the attacker, but that was never the
+// point — the developer's usage now runs through the attacker's account.
+
+/** The page's own save request. */
+const SAME_ORIGIN_WRITE = {
+  headers: {
+    'content-type': 'application/json',
+    host: 'localhost:4173',
+    origin: 'http://localhost:4173',
+    'sec-fetch-site': 'same-origin',
+  },
+  requireJsonBody: true,
+};
+
+test("the setup page's own save is accepted", () => {
+  assert.deepEqual(resolveRequestOrigin(SAME_ORIGIN_WRITE), { ok: true, reason: null });
+});
+
+test('the exact cross-origin write that reached .env is refused', () => {
+  const attack = resolveRequestOrigin({
+    headers: {
+      'content-type': 'text/plain;charset=UTF-8',
+      host: 'localhost:4173',
+      origin: 'https://evil.example',
+      'sec-fetch-site': 'cross-site',
+    },
+    requireJsonBody: true,
+  });
+  assert.equal(attack.ok, false);
+  assert.match(attack.reason, /application\/json/);
+});
+
+test('a non-JSON content type alone is refused on a write', () => {
+  // This is the load-bearing check: application/json is not CORS-safelisted,
+  // so requiring it forces a preflight that this server never answers.
+  for (const contentType of ['text/plain', 'application/x-www-form-urlencoded', 'multipart/form-data', '']) {
+    const verdict = resolveRequestOrigin({ headers: { 'content-type': contentType }, requireJsonBody: true });
+    assert.equal(verdict.ok, false, `${contentType || '(absent)'} was accepted`);
+  }
+});
+
+test('a JSON content type with parameters is still JSON', () => {
+  assert.equal(
+    resolveRequestOrigin({ headers: { 'content-type': 'application/JSON; charset=utf-8' }, requireJsonBody: true }).ok,
+    true,
+  );
+});
+
+test('an origin that does not match the host is refused', () => {
+  const verdict = resolveRequestOrigin({
+    headers: { 'content-type': 'application/json', host: 'localhost:4173', origin: 'http://localhost:5173' },
+    requireJsonBody: true,
+  });
+  assert.equal(verdict.ok, false);
+  assert.match(verdict.reason, /Cross-origin/);
+});
+
+test('a null origin — a sandboxed frame or file:// — is refused, not treated as absent', () => {
+  const verdict = resolveRequestOrigin({
+    headers: { 'content-type': 'application/json', host: 'localhost:4173', origin: 'null' },
+    requireJsonBody: true,
+  });
+  assert.equal(verdict.ok, false);
+});
+
+test('cross-site is refused on the strength of Sec-Fetch-Site alone', () => {
+  const verdict = resolveRequestOrigin({
+    headers: { 'content-type': 'application/json', host: 'localhost:4173', 'sec-fetch-site': 'cross-site' },
+    requireJsonBody: true,
+  });
+  assert.equal(verdict.ok, false);
+  assert.match(verdict.reason, /Cross-site/);
+  assert.equal(
+    resolveRequestOrigin({
+      headers: { 'content-type': 'application/json', 'sec-fetch-site': 'same-site' },
+      requireJsonBody: true,
+    }).ok,
+    false,
+  );
+});
+
+test('a command-line client with no browser headers still works', () => {
+  // CSRF needs a browser, and browsers always send Origin cross-origin. curl
+  // sends neither header, so refusing on absence would break scripting for no
+  // security gain.
+  assert.equal(
+    resolveRequestOrigin({ headers: { 'content-type': 'application/json' }, requireJsonBody: true }).ok,
+    true,
+  );
+  assert.equal(resolveRequestOrigin({ headers: {} }).ok, true);
+  assert.equal(resolveRequestOrigin().ok, true);
+});
+
+test('the status read is checked for origin but needs no request body', () => {
+  // A GET carries no body, so demanding a JSON content type would be wrong.
+  assert.equal(resolveRequestOrigin({ headers: { host: 'localhost:4173', origin: 'http://localhost:4173' } }).ok, true);
+  assert.equal(resolveRequestOrigin({ headers: { host: 'localhost:4173', origin: 'https://evil.example' } }).ok, false);
+});
+
+test('a header arriving as an array is read, not stringified into nonsense', () => {
+  assert.equal(
+    resolveRequestOrigin({
+      headers: { 'content-type': ['application/json'], host: 'localhost:4173', origin: ['http://localhost:4173'] },
+      requireJsonBody: true,
+    }).ok,
+    true,
+  );
 });

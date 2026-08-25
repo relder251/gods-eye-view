@@ -352,9 +352,27 @@ async function refreshStatus() {
   paintOfflineHelp();
 }
 
-/** Explain the offline half of the page, rather than showing dead controls. */
+/**
+ * Explain the offline half of the page, rather than showing dead controls.
+ *
+ * Every call sets the enabled state of the save controls outright, in both
+ * directions. Only ever disabling them meant a single transient status failure
+ * — the dev server is restarting after a save, which it does on every write —
+ * left every save button dead for the rest of the page's life: the next
+ * successful recheck reported "Status refreshed" and re-enabled nothing.
+ */
 function paintOfflineHelp() {
   const writeBlocked = !state.offline && state.status && !state.status.canWrite;
+  const canSave = !state.offline && !writeBlocked;
+
+  for (const button of dom.groups.querySelectorAll('[data-save]')) {
+    button.disabled = !canSave;
+    if (canSave) button.removeAttribute('title');
+    else button.title = 'Saving needs the local dev server';
+  }
+  dom.saveAll.hidden = !canSave;
+  refreshSnippet();
+
   dom.offlineNotice.hidden = !(state.offline || writeBlocked);
   if (dom.offlineNotice.hidden) return;
   dom.offlineNotice.dataset.tone = 'warn';
@@ -371,12 +389,6 @@ function paintOfflineHelp() {
       state.status.writeBlockedReason || 'The server declined to write .env.',
       ' Use "Copy .env lines" and edit the file directly.',
     ]));
-
-  for (const button of dom.groups.querySelectorAll('[data-save]')) {
-    button.disabled = true;
-    button.title = 'Saving needs the local dev server';
-  }
-  dom.saveAll.hidden = true;
 }
 
 // ── Actions ─────────────────────────────────────────────────────────────────

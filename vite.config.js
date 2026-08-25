@@ -68,6 +68,7 @@ import {
   MAX_WRITE_BODY_BYTES as SETUP_MAX_WRITE_BODY_BYTES,
   describeVariable,
   isLoopbackAddress,
+  resolveRequestOrigin,
   resolveWritePermission,
   sanitizeWriteRequest,
 } from './src/setup/setupServerPolicy.js';
@@ -7464,6 +7465,11 @@ function setupConsoleProxy() {
         sendJson(res, 405, { error: 'Method not allowed' });
         return;
       }
+      const sameOrigin = resolveRequestOrigin({ headers: req.headers });
+      if (!sameOrigin.ok) {
+        sendJson(res, 403, { error: sameOrigin.reason });
+        return;
+      }
       try {
         sendJson(res, 200, buildStatus(req));
       } catch {
@@ -7482,6 +7488,14 @@ function setupConsoleProxy() {
       }
       if (req.method !== 'POST') {
         sendJson(res, 405, { error: 'Method not allowed' });
+        return;
+      }
+      // Loopback is not sufficient on its own: the developer's own browser is
+      // a loopback client, so any page they have open could otherwise make it
+      // POST a credential here. Checked before the body is read.
+      const sameOrigin = resolveRequestOrigin({ headers: req.headers, requireJsonBody: true });
+      if (!sameOrigin.ok) {
+        sendJson(res, 403, { error: sameOrigin.reason });
         return;
       }
       let values;

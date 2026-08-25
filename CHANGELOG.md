@@ -53,6 +53,17 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Fixed
 
+- The setup console's `.env` write endpoint now requires a same-origin request.
+  A loopback-only gate was not sufficient on its own: the operator's own
+  browser is a loopback client, so any site open in it could POST a
+  CORS-simple `text/plain` request that overwrote an allowlisted credential
+  with an attacker's own value. Writes now require an `application/json`
+  content type, which forces a preflight this server never answers, and
+  reject a mismatched `Origin` or a cross-site `Sec-Fetch-Site`.
+- The setup console's save controls recover after a transient status failure.
+  A failed status request disabled every save button, and a later successful
+  recheck reported "Status refreshed" without re-enabling them, leaving the
+  page copy-only until a full reload.
 - A missing optional FIRMS key no longer turns the complete Environmental
   mission into `LOAD FAILED`. The FIRMS row still reports `KEY REQUIRED`, while
   earthquakes continue to load. Real lifecycle and fetch failures retain
