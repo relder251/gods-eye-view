@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Setup — God's Eye View</title>
+  <meta name="description" content="Every API key God's Eye View can use, where to get it, and whether this install is holding it." />
+  <meta name="robots" content="noindex" />
+  <link rel="icon" type="image/svg+xml" href="/logo.svg" />
+  <link rel="stylesheet" href="/src/setup/setup.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="wrap topbar-inner">
+      <div class="brand">
+        <img src="/logo.svg" alt="" />
+        <div class="brand-text">
+          <div class="brand-title">GOD'S EYE <span class="accent">VIEW</span></div>
+          <div class="brand-sub">MISSION SETUP · KEYS &amp; ACCESS</div>
+        </div>
+      </div>
+      <div class="topbar-spacer"></div>
+      <button type="button" class="btn btn-small" id="refresh-status">Recheck</button>
+      <a class="btn btn-primary btn-small" href="/">Open the globe</a>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="hero">
+      <h1>Get the keys. Light up the globe.</h1>
+      <p>
+        Most of God's Eye View needs nothing at all — flights, satellites, earthquakes, cameras, radio and
+        the bundled datasets run with zero accounts. This page covers the handful of providers that unlock
+        the rest: what each one turns on, the exact page that issues its credential, what it costs, and
+        whether this install is actually holding it right now.
+      </p>
+      <div class="legend">
+        <span><i class="dot dot-none"></i> No key — already running</span>
+        <span><i class="dot dot-free"></i> Free key — register and paste</span>
+        <span><i class="dot dot-metered"></i> Metered — billing account, costs are small but real</span>
+      </div>
+    </section>
+
+    <section class="readiness" id="readiness" data-tone="partial" aria-labelledby="readiness-headline">
+      <div class="readiness-head">
+        <p class="readiness-headline" id="readiness-headline">Checking what this server is holding…</p>
+        <span class="readiness-count" id="readiness-count"></span>
+      </div>
+      <div class="meter" id="readiness-meter" role="img" aria-label="Provider configuration status"></div>
+      <div class="notice" id="restart-notice" hidden></div>
+      <div class="notice" id="exposure-notice" hidden></div>
+      <div class="notice" id="offline-notice" hidden></div>
+    </section>
+
+    <nav class="filters" id="filters" aria-label="Filter providers">
+      <button type="button" class="chip" data-filter="all" aria-pressed="true">All</button>
+      <button type="button" class="chip" data-filter="todo" aria-pressed="false">Not configured</button>
+      <button type="button" class="chip" data-filter="required" aria-pressed="false">Required</button>
+      <button type="button" class="chip" data-filter="free" aria-pressed="false">Free keys</button>
+      <button type="button" class="chip" data-filter="metered" aria-pressed="false">Metered</button>
+    </nav>
+
+    <div id="provider-groups"></div>
+
+    <section class="free-floor" id="free-floor" aria-label="Layers that need no key"></section>
+
+    <section class="panel">
+      <h2>Save everything at once</h2>
+      <p>
+        Saving writes <code>.env</code>, which makes Vite restart and reload this page — so a key still
+        sitting unsaved in another card would go with it. Fill in as many providers as you like, then use
+        <strong>Save all pasted keys</strong>: one write, one reload, nothing lost. Or copy the block and
+        edit <code>.env</code> yourself.
+      </p>
+      <p id="env-snippet-note">Paste keys into the cards above and they appear here, ready to copy into <code>.env</code>.</p>
+      <pre id="env-snippet"></pre>
+      <div class="panel-actions">
+        <button type="button" class="btn btn-primary btn-small" id="save-all" disabled>Save all pasted keys</button>
+        <button type="button" class="btn btn-small" id="copy-all" disabled>Copy .env block</button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>macOS Keychain</h2>
+      <p>
+        On macOS, <code>./scripts/dev-fresh.sh</code> reads keys straight from the Keychain, so they never
+        touch a file in the repository. Run the command for a provider, paste the key at the prompt, and
+        launch with the script instead of <code>npm run dev</code>. A Keychain value outranks
+        <code>.env</code> — which is exactly the situation this page reports as
+        <strong>OVERRIDDEN</strong>.
+      </p>
+      <pre id="keychain-commands"></pre>
+      <div class="panel-actions">
+        <button type="button" class="btn btn-small" id="copy-keychain">Copy commands</button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Before you leave a key running</h2>
+      <p>
+        The dev server is a key broker: anything that can reach it can spend the quota on every credential
+        it holds. It binds to <code>localhost</code> for that reason, and this setup page answers only
+        requests from this machine even when you opt into <code>HOST=0.0.0.0</code>. App-level throttles
+        (<code>GEV_RATELIMIT_OPENAI_PER_MIN</code>, <code>GEV_RATELIMIT_GOOGLE_PER_MIN</code>) are guards,
+        not billing caps — set provider-side budgets for the two metered accounts before a long session.
+        Set <code>GEV_SETUP_READONLY=1</code> to keep this page's links and status but forbid it writing
+        <code>.env</code> at all.
+      </p>
+      <div class="panel-actions">
+        <a class="btn btn-small" href="https://github.com/bilawalsidhu/gods-eye-view/blob/main/SECURITY.md" target="_blank" rel="noopener noreferrer">Security model ↗</a>
+        <a class="btn btn-small" href="https://github.com/bilawalsidhu/gods-eye-view/blob/main/DATA_SOURCES.md" target="_blank" rel="noopener noreferrer">Data sources &amp; terms ↗</a>
+        <a class="btn btn-small" href="https://github.com/bilawalsidhu/gods-eye-view#-api-keys" target="_blank" rel="noopener noreferrer">README: keys &amp; costs ↗</a>
+      </div>
+    </section>
+
+    <footer>
+      <span>God's Eye View — no place left behind.</span>
+      <span>Every credential on this page is yours, held locally, and spendable only by you.</span>
+    </footer>
+  </main>
+
+  <div id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+  <script type="module" src="/src/setup/setupConsole.js"></script>
+</body>
+</html>

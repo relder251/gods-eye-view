@@ -874,6 +874,41 @@ body.cockpit-mode #cockpit-cloud-effects.active {
   50% { opacity: 1; }
 }
 
+/* Shown only when boot failed on a missing credential (src/main.js). The
+   loading screen is where a first-time user without a key ends up, so the
+   error gets a destination rather than just a colour. */
+.loader-key-help {
+  margin: 14px auto 0;
+  max-width: 46ch;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.loader-key-help a {
+  /* Its own line, centred under the sentence — inline it lands mid-wrap. */
+  display: block;
+  width: fit-content;
+  margin: 12px auto 0;
+  padding: 7px 14px;
+  border: 1px solid rgba(0, 212, 255, 0.45);
+  border-radius: var(--btn-radius);
+  background: var(--accent-dim);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  text-decoration: none;
+  transition: background var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.loader-key-help a:hover {
+  background: rgba(0, 212, 255, 0.22);
+  box-shadow: 0 0 24px -6px var(--accent-glow);
+}
+
 /* ── Post-Processing Toggles ─────────────────── */
 #pp-toggles {
   --pp-expanded-width: var(--display-panel-expanded-width);

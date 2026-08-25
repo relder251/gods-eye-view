@@ -18,6 +18,7 @@
  *  13. Weather effects — camera-local Open-Meteo observations without news/geocoding overhead
  *  14. Rocket launches — recent Launch Library 2 mission metadata
  *  15. Radio Browser — public-domain station directory and click counting
+ *  16. Setup console — loopback-only key status and `.env` writes for `/setup`
  *
  * Also exposes Cesium and Google 3D Tiles API keys to the
  * client via `import.meta.env.*` defines.
@@ -61,6 +62,15 @@ import {
   validTerrainResult,
 } from './src/data/terrainHeightsProxy.js';
 import { VOICE_MODELS, isKnownVoiceTier, resolveVoiceModel } from './src/voice/voiceCost.js';
+import { parseDotenv, upsertDotenv } from './src/setup/dotenvFile.js';
+import { writableVariableNames } from './src/setup/providerCatalog.js';
+import {
+  MAX_WRITE_BODY_BYTES as SETUP_MAX_WRITE_BODY_BYTES,
+  describeVariable,
+  isLoopbackAddress,
+  resolveWritePermission,
+  sanitizeWriteRequest,
+} from './src/setup/setupServerPolicy.js';
 
 /** Resolve __dirname for ESM context. */
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -7323,6 +7333,193 @@ function normalizeAisTimestamp(value) {
   return Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString();
 }
 
+
+/**
+ * Vite plugin: the `/setup` key console's server half.
+ *
+ * Serves three things, and nothing else:
+ *   GET  /setup            — a rewrite to setup.html, so the page has a real URL
+ *   GET  /api/setup/status — which credentials the server holds, never their values
+ *   POST /api/setup/env    — upsert credentials into this checkout's `.env`
+ *
+ * Both API routes answer loopback callers only. That is stricter than the rest
+ * of the dev server on purpose: `HOST=0.0.0.0` is a documented opt-in for
+ * sharing the globe on a LAN, and it must not also share a page that lists and
+ * rewrites the operator's keys. The gate is the socket peer address, which a
+ * client cannot forge with a header (see src/setup/setupServerPolicy.js).
+ */
+function setupConsoleProxy() {
+  const envPath = path.join(__dirname, '.env');
+  const examplePath = path.join(__dirname, '.env.example');
+
+  const sendJson = (res, status, body) => {
+    if (res.headersSent) return;
+    res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify(body));
+  };
+
+  /** Read this checkout's `.env`, treating an absent file as an empty one. */
+  const readEnvFile = () => {
+    try {
+      return fs.readFileSync(envPath, 'utf8');
+    } catch (error) {
+      if (error?.code === 'ENOENT') return null;
+      throw error;
+    }
+  };
+
+  /**
+   * Compare `process.env` against the file for every catalogued variable.
+   * Values stay in this function; only the derived state leaves.
+   */
+  const buildStatus = (req) => {
+    const fileText = readEnvFile();
+    const fileValues = parseDotenv(fileText ?? '');
+    const permission = resolveWritePermission({
+      remoteAddress: req.socket?.remoteAddress,
+      readonlyFlag: process.env.GEV_SETUP_READONLY,
+    });
+    const variables = {};
+    for (const name of writableVariableNames()) {
+      variables[name] = describeVariable({
+        processValue: process.env[name],
+        fileValue: fileValues.get(name),
+      });
+    }
+    return {
+      variables,
+      envFile: { exists: fileText !== null, path: '.env' },
+      canWrite: permission.allowed,
+      writeBlockedReason: permission.reason,
+      host: process.env.HOST || 'localhost',
+      // A LAN-exposed server is brokering these keys to everyone who can reach
+      // it; the console says so rather than leaving it to SECURITY.md.
+      networkExposed: !['localhost', '127.0.0.1', '::1'].includes(process.env.HOST || 'localhost'),
+    };
+  };
+
+  /** Read a bounded JSON body, matching the other write-accepting proxies. */
+  const readJsonBody = (req) => new Promise((resolve, reject) => {
+    let size = 0;
+    const chunks = [];
+    req.on('data', (chunk) => {
+      size += chunk.length;
+      if (size > SETUP_MAX_WRITE_BODY_BYTES) {
+        reject(new Error('Request body too large'));
+        req.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on('end', () => {
+      try {
+        resolve(JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}'));
+      } catch {
+        reject(new Error('Request body is not valid JSON'));
+      }
+    });
+    req.on('error', reject);
+  });
+
+  /**
+   * Write values into `.env`, seeding from `.env.example` on a first run so the
+   * file a user ends up with is the documented one, comments and all.
+   */
+  const writeValues = (values) => {
+    let current = readEnvFile();
+    let seeded = false;
+    if (current === null) {
+      current = fs.readFileSync(examplePath, 'utf8');
+      seeded = true;
+    }
+    const result = upsertDotenv(current, values);
+    // 0600: the file now holds real credentials, so it should not be
+    // world-readable even on a shared machine.
+    fs.writeFileSync(envPath, result.text, { mode: 0o600 });
+    try {
+      fs.chmodSync(envPath, 0o600);
+    } catch {
+      // Best effort — some filesystems (and Windows) will not take the mode.
+    }
+    return { ...result, seeded };
+  };
+
+  function install(middlewares) {
+    // A real path for the console. Vite would serve /setup.html directly, but
+    // /setup is what the app links to and what a person will type.
+    middlewares.use((req, res, next) => {
+      const pathname = String(req.url || '').split('?')[0];
+      if (pathname === '/setup' || pathname === '/setup/') {
+        req.url = '/setup.html';
+      }
+      next();
+    });
+
+    middlewares.use('/api/setup/status', (req, res) => {
+      if (!isLoopbackAddress(req.socket?.remoteAddress)) {
+        sendJson(res, 403, { error: 'The setup console only answers requests from this machine.' });
+        return;
+      }
+      if (req.method !== 'GET') {
+        sendJson(res, 405, { error: 'Method not allowed' });
+        return;
+      }
+      try {
+        sendJson(res, 200, buildStatus(req));
+      } catch {
+        sendJson(res, 500, { error: 'Could not read the environment status' });
+      }
+    });
+
+    middlewares.use('/api/setup/env', async (req, res) => {
+      const permission = resolveWritePermission({
+        remoteAddress: req.socket?.remoteAddress,
+        readonlyFlag: process.env.GEV_SETUP_READONLY,
+      });
+      if (!permission.allowed) {
+        sendJson(res, 403, { error: permission.reason });
+        return;
+      }
+      if (req.method !== 'POST') {
+        sendJson(res, 405, { error: 'Method not allowed' });
+        return;
+      }
+      let values;
+      try {
+        values = sanitizeWriteRequest(await readJsonBody(req), writableVariableNames());
+      } catch (error) {
+        // These messages are about the caller's own request, so they are safe
+        // to return; nothing here reflects a credential or a server path.
+        sendJson(res, 400, { error: error?.message || 'Invalid request' });
+        return;
+      }
+      try {
+        const written = writeValues(values);
+        sendJson(res, 200, {
+          saved: Object.keys(values),
+          seededFromExample: written.seeded,
+          updated: written.updated,
+          activated: written.activated,
+          appended: written.appended,
+          status: buildStatus(req),
+        });
+      } catch {
+        sendJson(res, 500, { error: 'Could not write .env' });
+      }
+    });
+  }
+
+  return {
+    name: 'setup-console',
+    configureServer(server) {
+      install(server.middlewares);
+    },
+    configurePreviewServer(server) {
+      install(server.middlewares);
+    },
+  };
+}
+
 /**
  * Main Vite configuration factory.
  *
@@ -7360,6 +7557,7 @@ export default defineConfig(({ mode }) => {
       trackBackfillProxies(),
       openAiRealtimeProxy(),
       googlePlacesContextProxy(),
+      setupConsoleProxy(),
     ],
     server: {
       host: env.HOST || 'localhost',
@@ -7378,6 +7576,15 @@ export default defineConfig(({ mode }) => {
       // The Cesium engine bundle is inherently large; raise the warning ceiling
       // so the build log isn't dominated by an expected chunk-size notice.
       chunkSizeWarningLimit: 1500,
+      rollupOptions: {
+        // Two entries: the globe, and the standalone key console. A built
+        // /setup.html keeps its links and its copyable .env snippet; only the
+        // live status and save controls need the dev server.
+        input: {
+          main: path.resolve(__dirname, 'index.html'),
+          setup: path.resolve(__dirname, 'setup.html'),
+        },
+      },
     },
   };
 });

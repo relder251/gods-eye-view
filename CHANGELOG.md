@@ -7,6 +7,21 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Added a setup console at `/setup`: every provider God's Eye View can use, what
+  each one unlocks, a link to the exact page that issues its credential, its
+  cost and provider-side budget controls, and whether this install is holding
+  it. Keys pasted there are written into `.env` with comments preserved and
+  commented-out placeholders activated in place. The console reports the state
+  a checkmark hides — a key set in `.env` but overridden by a shell export, a
+  Keychain value, or a value the process loaded before the file changed — and
+  names the restart that fixes it.
+- The setup console's status and write endpoints answer loopback callers only,
+  independently of `HOST`, so `HOST=0.0.0.0` shares the globe without sharing
+  the key console. `GEV_SETUP_READONLY=1` keeps its links and status while
+  refusing every write. With no dev server behind it the page still works and
+  offers a copyable `.env` block instead.
+- A boot failure caused by a missing credential now links to the setup console
+  from the loading screen instead of leaving a red error line.
 - Added honest aircraft identity narration: callsign, operator, registration,
   type, and route come only from selected-contact context, and missing operator,
   route, or type enrichment is named explicitly.
@@ -17,6 +32,8 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Changed
 
+- `.env.example` now documents `LL2_API_TOKEN` and `TFL_APP_KEY`. Both were
+  already read by the server; neither was written down.
 - First-run presentation now opens with Detection `DENSE` at 75%, `ELASTIC`
   allocation, Fade 7%, Outside 1%, scope feather 11%, and aircraft 3D models in
   `PROXIMITY`. Stored state and share links still override these baselines.

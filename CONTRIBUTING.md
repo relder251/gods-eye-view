@@ -15,7 +15,7 @@ npm install
 ./scripts/dev-fresh.sh        # or: GOOGLE_MAPS_API_KEY="…" npm run dev
 ```
 
-You need a **Google Maps API key** with the Map Tiles API enabled (see the [README](README.md#-api-keys)). Most data layers work with no other accounts. On macOS the launcher pulls keys from the Keychain; on any platform you can pass them as env vars or use a `.env` (copy `.env.example`).
+You need a **Google Maps API key** with the Map Tiles API enabled. The fastest route is the setup console at **`http://localhost:4173/setup`** — it links to the exact page that issues each provider's credential, shows which ones your install is holding, and writes them into `.env` for you (see the [README](README.md#-api-keys)). Most data layers work with no other accounts. On macOS the launcher pulls keys from the Keychain; on any platform you can pass them as env vars or use a `.env` (copy `.env.example`).
 
 Open `http://localhost:4173`. Before sending a PR run `npm run build`, `npm test`, and `npm run test:track` (dev server must be up) — **all three must stay green.**
 
