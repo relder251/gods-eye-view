@@ -22,6 +22,12 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   offers a copyable `.env` block instead.
 - A boot failure caused by a missing credential now links to the setup console
   from the loading screen instead of leaving a red error line.
+- Added GitHub Actions workflows. `ci.yml` runs the unit suite and the build on
+  Node 24 and Node 26 for every push and pull request, enforces the calibrated
+  allocation gate on the Node 24 leg, and fails if `.env` is ever committed. It
+  uses no API keys, so it passes for pull requests from forks. `browser-qa.yml`
+  carries the browser suites, which need a real Google Maps key and spend Map
+  Tiles quota; it runs on manual dispatch only.
 - Added honest aircraft identity narration: callsign, operator, registration,
   type, and route come only from selected-contact context, and missing operator,
   route, or type enrichment is named explicitly.

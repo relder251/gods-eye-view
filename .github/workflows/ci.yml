@@ -1,0 +1,88 @@
+# Always-on gate. Everything here is hermetic: no API keys, no network calls to
+# a provider, nothing billable. That is deliberate — it must pass for a pull
+# request from a fork, which cannot read repository secrets.
+#
+# The browser suites (`test:track`, `qa:map-source-tray`) are NOT here. They
+# drive a real browser against real Google Photorealistic 3D Tiles, which needs
+# a key and costs money per run. They live in browser-qa.yml, on manual
+# dispatch only.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A new push supersedes an in-flight run for the same ref.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    strategy:
+      # Report both runtimes; a failure on one should not hide the other.
+      fail-fast: false
+      matrix:
+        include:
+          # The two ranges package.json's `engines` field allows.
+          - node: '24.x'
+            # `scripts/run-unit-tests.mjs` calibrates its GC-bracketed
+            # allocation budgets on Node 24, and silently SKIPS them on any
+            # other major. Setting this turns that skip into a hard failure, so
+            # a future bump of this matrix entry cannot quietly drop 14 tests.
+            allocation_gate: '1'
+          - node: '26.x'
+            # Left empty on purpose: on Node 26 the allocation probes are
+            # expected to skip with a warning, and that is not a failure.
+            allocation_gate: ''
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - name: Install dependencies
+        # Puppeteer is a devDependency, but nothing in the unit suite or the
+        # build drives a browser — skipping the Chromium download saves a
+        # ~150 MB fetch on every run. browser-qa.yml does not skip it.
+        #
+        # npm 11 also blocks lifecycle scripts by default, so sharp's install
+        # check does not run either. That is fine here: sharp resolves from its
+        # prebuilt platform package, and neither suite below needs it. The
+        # browser job cannot rely on that leniency and installs Chromium
+        # explicitly.
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: '1'
+        run: npm ci
+
+      - name: No credentials in the repository
+        # SECURITY.md's rule, enforced rather than trusted. `.env` is
+        # gitignored, and the setup console writes real keys into it.
+        run: |
+          if git ls-files --error-unmatch .env >/dev/null 2>&1; then
+            echo "::error file=.env::.env is tracked by git. It holds real API keys and must stay ignored."
+            exit 1
+          fi
+          echo ".env is not tracked."
+
+      - name: Unit tests
+        env:
+          GEV_REQUIRE_ALLOCATION_GATE: ${{ matrix.allocation_gate }}
+        run: npm test
+
+      - name: Build
+        # Runs with no keys set at all, which is also the check that a missing
+        # GOOGLE_MAPS_API_KEY cannot break the production build.
+        run: npm run build

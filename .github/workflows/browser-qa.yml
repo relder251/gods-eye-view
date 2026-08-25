@@ -1,0 +1,126 @@
+# The browser suites, kept off the default gate on purpose.
+#
+# `test:track` and `qa:map-source-tray` drive real Chromium against a real dev
+# server, and the app's globe is Google Photorealistic 3D Tiles. That means
+# every run:
+#   - needs a GOOGLE_MAPS_API_KEY repository secret, and
+#   - SPENDS Map Tiles quota, which is billed.
+#
+# So this is `workflow_dispatch` only: it never fires on its own. To run it on
+# every push to main, add
+#
+#   push:
+#     branches: [main]
+#
+# to the triggers below — and set a Google Cloud budget alert first.
+#
+# Note for forks: repository secrets are not exposed to workflows triggered by
+# a pull request from a fork, which is why none of this can live in ci.yml.
+name: Browser QA
+
+on:
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: Which browser suite to run
+        type: choice
+        default: all
+        options: [all, track-regression, map-source-tray]
+
+permissions:
+  contents: read
+
+jobs:
+  browser-qa:
+    name: Browser QA (billable)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
+      CESIUM_ION_TOKEN: ${{ secrets.CESIUM_ION_TOKEN }}
+      # Keep the dev server on loopback. It brokers whatever keys are set, and
+      # a runner is not a network you control.
+      HOST: localhost
+      PORT: '4173'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # The calibrated runtime, matching the default leg of ci.yml.
+          node-version: '24.x'
+          cache: npm
+
+      - name: Require the Google Maps key
+        # Fail loudly and early rather than after a five-minute browser run
+        # whose every assertion failed for one missing secret.
+        run: |
+          if [ -z "$GOOGLE_MAPS_API_KEY" ]; then
+            echo "::error::GOOGLE_MAPS_API_KEY is not set. Add it under Settings -> Secrets and variables -> Actions."
+            exit 1
+          fi
+
+      - name: Install dependencies
+        # No PUPPETEER_SKIP_DOWNLOAD here: this job needs the browser.
+        run: npm ci
+
+      - name: Install Chromium
+        # Do NOT rely on Puppeteer's postinstall hook. npm 11 (bundled with
+        # Node 24.19+) blocks lifecycle scripts by default and only warns, so
+        # the install "succeeds" with no browser on disk and every launch fails
+        # later with a confusing error. This command is the supported entry
+        # point and works whichever way npm is configured.
+        run: npx puppeteer browsers install chrome
+
+      - name: Start the dev server
+        # Vite is launched directly rather than through `npm run dev` so the
+        # recorded PID is the process actually holding the port. Backgrounding
+        # npm records the wrapper instead, and killing that leaves the server
+        # running — a teardown step that silently does nothing.
+        run: |
+          node node_modules/vite/bin/vite.js --host localhost --port 4173 > "$RUNNER_TEMP/vite.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/vite.pid"
+          for _ in $(seq 1 60); do
+            if curl -sf -o /dev/null http://localhost:4173/; then
+              echo "Dev server up."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::Dev server did not come up within 120s."
+          cat "$RUNNER_TEMP/vite.log"
+          exit 1
+
+      - name: Track regression
+        if: inputs.suite == 'all' || inputs.suite == 'track-regression'
+        run: npm run test:track
+
+      - name: Map source tray
+        if: inputs.suite == 'all' || inputs.suite == 'map-source-tray'
+        run: npm run qa:map-source-tray
+
+      - name: Collect screenshots
+        # These are the whole point of a failed browser run.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-qa-shots
+          path: |
+            qa-shots/
+            screenshots/
+            output/
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Dev server log
+        if: failure()
+        run: cat "$RUNNER_TEMP/vite.log" || true
+
+      - name: Stop the dev server
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/vite.pid" ]; then
+            kill "$(cat "$RUNNER_TEMP/vite.pid")" 2>/dev/null || true
+          fi
