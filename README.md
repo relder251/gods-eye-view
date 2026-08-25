@@ -69,7 +69,7 @@ npm install
 npm run dev -- --host localhost --port 4173
 ```
 
-3. Open **`http://localhost:4173`**. Cold start settles in under two seconds on a recent laptop (median 1.86 s in a point-in-time M5/Chrome capture — [docs/PERFORMANCE.md](docs/PERFORMANCE.md); a comparison baseline, not a hardware requirement). A first-run card offers to stage a mission for you — **Live Contacts**, **Space Missions**, **Environmental** — or leaves you to explore manually.
+3. Open **`http://localhost:4173`** — or start at **`http://localhost:4173/setup`**, which lists every provider, links straight to the page that issues each key, shows which ones this install is actually holding, and can write them into `.env` for you. Cold start settles in under two seconds on a recent laptop (median 1.86 s in a point-in-time M5/Chrome capture — [docs/PERFORMANCE.md](docs/PERFORMANCE.md); a comparison baseline, not a hardware requirement). A first-run card offers to stage a mission for you — **Live Contacts**, **Space Missions**, **Environmental** — or leaves you to explore manually.
 
 **That one key is the whole entry fee.** Everything in this README is color-coded — 🟢 needs nothing · 🟡 free key · 🔴 metered — and Google Maps is the only 🔴 you need: it buys the photorealistic planet, and most of the globe lights up 🟢 from there. Full map in [Keys & Costs](#-api-keys).
 
@@ -267,6 +267,14 @@ See [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md) for the authoritative runti
 
 Most of the globe is 🟢: flights (anonymous), military traffic, satellites, earthquakes, CCTV, radio, bikeshare, space missions, mapped installations, and every bundled dataset run with **zero keys**.
 
+> ### 🎛️ Do this in the browser instead: [`localhost:4173/setup`](http://localhost:4173/setup)
+>
+> The tables below are the reference. The **setup console** is the same information as a working page: every provider, what it unlocks, a link straight to the exact page that issues its credential, what it costs, and **whether this install is actually holding it right now**. Paste a key and it writes `.env` for you — comments preserved, commented-out placeholders activated in place.
+>
+> It also answers the question a checkmark can't. Because the config backfills `process.env` only where a variable is unset, a shell export or a Keychain value silently outranks `.env` — so a key you just edited can sit there doing nothing. The console reports that as **OVERRIDDEN** rather than showing it green, and tells you which restart fixes it.
+>
+> The status and save endpoints answer **loopback only**, whatever `HOST` is set to, so `HOST=0.0.0.0` shares the globe without sharing your keys. `GEV_SETUP_READONLY=1` keeps the links and status but forbids writing. With no dev server behind it the page still works — it just hands you a `.env` block to paste. If the app fails to boot for a missing key, the loading screen links you here.
+
 ### What you need for the good experience
 
 Five keys cover the fully keyed experience. Three currently offer no-cost developer access; Google Maps and OpenAI are usage-metered. Provider prices and allowances change, so use the linked pricing pages before relying on a budget estimate:
@@ -289,7 +297,8 @@ Five keys cover the fully keyed experience. Three currently offer no-cost develo
 |---|-----|-----|--------|
 | 🟡 | **Cesium ion** | 🗺️ Bing imagery map stacks (public `assets:read` token) | [cesium.com/ion](https://cesium.com/ion) — [check the plan that fits your use](https://cesium.com/platform/cesium-ion/pricing/) |
 | 🟡 | **OpenSky** | ✈️ More flight-polling credits (🟢 anonymous works without) | [opensky-network.org](https://opensky-network.org) |
-| 🟡 | **Launch Library 2** | 🚀 Higher space-missions request allowance (🟢 works without) | [thespacedevs.com](https://thespacedevs.com) |
+| 🟡 | **Launch Library 2** | 🚀 Higher space-missions request allowance (🟢 works without) | [thespacedevs.com](https://thespacedevs.com/llapi) |
+| 🟡 | **TfL Open Data** | 📹 Higher rate limit on the London JamCams camera list (🟢 works without) | [api-portal.tfl.gov.uk](https://api-portal.tfl.gov.uk/) |
 
 All of them are worth getting. None of them are required to start.
 

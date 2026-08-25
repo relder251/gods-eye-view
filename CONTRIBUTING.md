@@ -15,9 +15,11 @@ npm install
 ./scripts/dev-fresh.sh        # or: GOOGLE_MAPS_API_KEY="…" npm run dev
 ```
 
-You need a **Google Maps API key** with the Map Tiles API enabled (see the [README](README.md#-api-keys)). Most data layers work with no other accounts. On macOS the launcher pulls keys from the Keychain; on any platform you can pass them as env vars or use a `.env` (copy `.env.example`).
+You need a **Google Maps API key** with the Map Tiles API enabled. The fastest route is the setup console at **`http://localhost:4173/setup`** — it links to the exact page that issues each provider's credential, shows which ones your install is holding, and writes them into `.env` for you (see the [README](README.md#-api-keys)). Most data layers work with no other accounts. On macOS the launcher pulls keys from the Keychain; on any platform you can pass them as env vars or use a `.env` (copy `.env.example`).
 
 Open `http://localhost:4173`. Before sending a PR run `npm run build`, `npm test`, and `npm run test:track` (dev server must be up) — **all three must stay green.**
+
+CI (`.github/workflows/ci.yml`) runs `npm test` and `npm run build` on Node 24 and 26 for every push and pull request. It is deliberately hermetic — no keys, nothing billable — so it passes for a fork PR, which cannot read repository secrets. The browser suites (`test:track`, `qa:map-source-tray`) need a real Google Maps key and spend Map Tiles quota, so they live in `.github/workflows/browser-qa.yml` and run only on manual dispatch. Run those locally before you send the PR.
 
 ## Good first contributions
 

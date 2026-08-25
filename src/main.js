@@ -32,6 +32,7 @@ import {
 } from './renderGovernor.js';
 import { installScopeMask } from './scopeMask.js';
 import { initFirstRunExperience } from './firstRunExperience.js';
+import { bootstrapKeyNotice } from './setup/bootstrapNotice.js';
 
 initLogoGaze();
 
@@ -330,6 +331,20 @@ async function init() {
     console.error("God's Eye View initialization failed:", error);
     loaderStatus.textContent = `Error: ${describeError(error)}`;
     loaderStatus.style.color = '#ff4444';
+    // A missing credential is the one boot failure with a known next step, and
+    // the loading screen is where a first-time user is standing when they hit
+    // it. Send them to the setup console instead of leaving a red line.
+    const notice = bootstrapKeyNotice(error);
+    if (notice) {
+      const help = document.createElement('p');
+      help.className = 'loader-key-help';
+      help.textContent = `${notice.message} `;
+      const link = document.createElement('a');
+      link.href = notice.href;
+      link.textContent = notice.linkLabel;
+      help.append(link);
+      loaderStatus.insertAdjacentElement('afterend', help);
+    }
   }
 }
 

@@ -7,6 +7,27 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Added a setup console at `/setup`: every provider God's Eye View can use, what
+  each one unlocks, a link to the exact page that issues its credential, its
+  cost and provider-side budget controls, and whether this install is holding
+  it. Keys pasted there are written into `.env` with comments preserved and
+  commented-out placeholders activated in place. The console reports the state
+  a checkmark hides — a key set in `.env` but overridden by a shell export, a
+  Keychain value, or a value the process loaded before the file changed — and
+  names the restart that fixes it.
+- The setup console's status and write endpoints answer loopback callers only,
+  independently of `HOST`, so `HOST=0.0.0.0` shares the globe without sharing
+  the key console. `GEV_SETUP_READONLY=1` keeps its links and status while
+  refusing every write. With no dev server behind it the page still works and
+  offers a copyable `.env` block instead.
+- A boot failure caused by a missing credential now links to the setup console
+  from the loading screen instead of leaving a red error line.
+- Added GitHub Actions workflows. `ci.yml` runs the unit suite and the build on
+  Node 24 and Node 26 for every push and pull request, enforces the calibrated
+  allocation gate on the Node 24 leg, and fails if `.env` is ever committed. It
+  uses no API keys, so it passes for pull requests from forks. `browser-qa.yml`
+  carries the browser suites, which need a real Google Maps key and spend Map
+  Tiles quota; it runs on manual dispatch only.
 - Added honest aircraft identity narration: callsign, operator, registration,
   type, and route come only from selected-contact context, and missing operator,
   route, or type enrichment is named explicitly.
@@ -17,6 +38,8 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Changed
 
+- `.env.example` now documents `LL2_API_TOKEN` and `TFL_APP_KEY`. Both were
+  already read by the server; neither was written down.
 - First-run presentation now opens with Detection `DENSE` at 75%, `ELASTIC`
   allocation, Fade 7%, Outside 1%, scope feather 11%, and aircraft 3D models in
   `PROXIMITY`. Stored state and share links still override these baselines.
@@ -30,6 +53,17 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Fixed
 
+- The setup console's `.env` write endpoint now requires a same-origin request.
+  A loopback-only gate was not sufficient on its own: the operator's own
+  browser is a loopback client, so any site open in it could POST a
+  CORS-simple `text/plain` request that overwrote an allowlisted credential
+  with an attacker's own value. Writes now require an `application/json`
+  content type, which forces a preflight this server never answers, and
+  reject a mismatched `Origin` or a cross-site `Sec-Fetch-Site`.
+- The setup console's save controls recover after a transient status failure.
+  A failed status request disabled every save button, and a later successful
+  recheck reported "Status refreshed" without re-enabling them, leaving the
+  page copy-only until a full reload.
 - A missing optional FIRMS key no longer turns the complete Environmental
   mission into `LOAD FAILED`. The FIRMS row still reports `KEY REQUIRED`, while
   earthquakes continue to load. Real lifecycle and fetch failures retain

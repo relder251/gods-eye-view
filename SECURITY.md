@@ -52,6 +52,19 @@ The dev server is a **key broker**: every server-side key above is spendable by 
 - **App-level throttles (opt-in):** `GEV_RATELIMIT_OPENAI_PER_MIN` and `GEV_RATELIMIT_GOOGLE_PER_MIN` cap the cost-bearing endpoints per client IP per minute (over-limit requests receive a sanitized `429`). They are **per-IP, process-local, in-memory guards** — they reset on restart and are **not billing caps**.
 - **Provider-side budgets are the real backstop.** For hard spend protection, configure limits where the money is: OpenAI platform usage limits, Google Cloud budget alerts + per-API quotas, and equivalent controls for any other keyed provider.
 
+## The setup console (`/setup`)
+
+The key console is the one page that both reports which credentials exist and can write new ones to disk, so it is held to a tighter rule than the rest of the dev server:
+
+- **Loopback only, independently of `HOST`.** `GET /api/setup/status` and `POST /api/setup/env` answer only when the socket peer address is loopback. Opting into `HOST=0.0.0.0` shares the globe on your LAN; it does not share the key console. The gate reads `req.socket.remoteAddress` and never trusts a forwarded-for header.
+- **Same-origin only.** Loopback is necessary but not sufficient: your own browser is a loopback client, so any site you have open could otherwise make it POST here. The same-origin policy would stop that page reading the reply, but not sending the request — enough to replace a credential with an attacker's own and route your usage through their account. Writes therefore require `Content-Type: application/json`, which is not CORS-safelisted and so forces a preflight this server never answers; a present `Origin` must match the `Host`, and a present `Sec-Fetch-Site` must say same-origin. Command-line clients send neither header and keep working, because CSRF requires a browser.
+- **No credential value is ever returned.** Status reports a state (`active` / `pending` / `conflict` / `missing`), the value's length, and its last four characters when it is at least twelve long — enough to recognize a key you just pasted, never enough to use one. Comparison against `.env` happens server-side.
+- **Allowlisted names only.** Writes accept only variables in `src/setup/providerCatalog.js`, and reject values containing line breaks or control characters, so a pasted "key" cannot define an extra assignment.
+- **`.env` is written at mode `0600`**, seeded from `.env.example` on first save, with existing comments preserved.
+- **`GEV_SETUP_READONLY=1`** keeps the console's links and status but refuses every write.
+
+The page itself is ordinary static content — links, instructions, and provider terms — and stays available when the API is refused; it simply reports offline mode and offers a `.env` block to paste yourself.
+
 ## Scope & expectations
 
 - The Vite server is a **development/preview** server. If you expose it beyond localhost, put it behind your own auth/proxy and review the bindings (see the threat model above).
