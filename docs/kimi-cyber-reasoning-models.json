@@ -1,0 +1,54 @@
+{
+  "dataset": {
+    "hf_id": "echel0nn1881/kimi-cyber-reasoning",
+    "url": "https://huggingface.co/datasets/echel0nn1881/kimi-cyber-reasoning",
+    "pretty_name": "Kimi Cyber Reasoning",
+    "author": "echel0nn1881",
+    "license": "wtfpl",
+    "records": 997,
+    "files": ["README.md", "train.jsonl"],
+    "contains_model_weights": false,
+    "reviewed_on": "2026-09-08"
+  },
+  "models": [
+    {
+      "name": "Kimi K3",
+      "hf_id": "moonshotai/Kimi-K3",
+      "url": "https://huggingface.co/moonshotai/Kimi-K3",
+      "provider": "Moonshot AI",
+      "role": "teacher",
+      "relationship": "All 997 records were distilled from this model via API; it is the sole generating model.",
+      "architecture": "kimi_k3 (mixture-of-experts reasoning model)",
+      "parameters_approx": "2.78T",
+      "pipeline_tag": "image-text-to-text",
+      "license": "other",
+      "evidence": [
+        "Dataset card: 'distilled from the Kimi K3 reasoning model via API' and 'Teacher model: Kimi K3 (Moonshot AI MoE reasoning architecture)'.",
+        "Dataset tag 'kimi'.",
+        "Rows 138 and 254 of train.jsonl contain the assistant self-identifying as 'Kimi with a thinking channel'.",
+        "meta.mock is false on every record (997/997), so every sample came from a real API call."
+      ],
+      "generation_stats": {
+        "prompt_tokens": 389425,
+        "completion_tokens": 2802204,
+        "cost_usd_total": 43.2
+      }
+    }
+  ],
+  "hub_models_trained_on_dataset": {
+    "checked_via": "https://huggingface.co/api/models?filter=dataset:echel0nn1881/kimi-cyber-reasoning",
+    "result": [],
+    "note": "No Hub model declares this dataset as training data as of 2026-09-08. The author account echel0nn1881 publishes no model repositories."
+  },
+  "intended_student_models": {
+    "description": "The card states the set is an anchor for 'training, healing, and specializing compact reasoning models' but names no specific student model.",
+    "named": []
+  },
+  "incidental_mentions": [
+    {
+      "name": "Claude",
+      "rows": [209],
+      "note": "Mentioned once inside a reasoning trace as a point of comparison. Not a source, teacher, or target of this dataset."
+    }
+  ]
+}
